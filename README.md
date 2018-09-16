@@ -4,11 +4,11 @@ https://forums.autodesk.com/t5/fusion-360-ideastation/create-parameter-name-whil
 
 Date: 2014-12-15. Implemented: nope. That is all.
 
-This implements the oft-demanded feature in the form of a button in the sketch menu.
+This implements the oft-demanded feature in the form of a button in the right click menu of a dimension.
 
 ## Usage
 
-Select a sketch dimension, then in the Sketch panel, click Rename Dimension.
+Select a sketch dimension, then in the right click menu, select Rename Dimension.
 
 ## Building
 
