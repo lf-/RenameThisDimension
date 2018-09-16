@@ -27,36 +27,24 @@ public:
 };
 
 
-bool endswith(std::string s, std::string sub) {
-	return (s.find(sub, 0) + sub.length()) == s.length();
+Ptr<SketchDimension> getSelectedDimension(Ptr<Selections> selections) {
+	if (!selections) return nullptr;
+
+	if (selections->count() != 1) return nullptr;
+
+	auto sel = selections->item(0);
+	if (!sel) return nullptr;
+	auto ent = sel->entity();
+	if (!ent) return nullptr;
+
+	// this will be null if the cast is invalid because of the fancy Ptr type
+	return ent->cast<SketchDimension>();
 }
-
-
-bool isADimension(std::string objectType) {
-	// this is offensive code and I wish I could just check if the object is a subclass of SketchDimension
-	return objectType.rfind("adsk::fusion::Sketch", 0) == 0 && endswith(objectType, "Dimension");
-}
-
 
 tl::expected<int, Err> handleRename() {
 	auto selections = ui->activeSelections();
-	if (!selections) return tl::make_unexpected(Err("activeSelections is null"));
 
-	if (selections->count() != 1) return tl::make_unexpected(Err("Must have exactly one selection"));
-
-	auto sel = selections->item(0);
-	if (!sel) return tl::make_unexpected(Err("Your selection is null. WTF?"));
-	auto ent = sel->entity();
-	if (!ent) return tl::make_unexpected(Err("Your selection references a null thing. WTF?"));
-
-	std::string entType = ent->objectType();
-	if (!isADimension(entType)) {
-		std::stringstream ss;
-		ss << "Selected " << entType << " is not a dimension";
-		return tl::make_unexpected(Err(ss.str()));
-	}
-
-	auto dim = ent->cast<SketchDimension>();
+	auto dim = getSelectedDimension(selections);
 	if (!dim) return tl::make_unexpected(Err("Given dimension is null"));
 	auto param = dim->parameter();
 	if (!param) return tl::make_unexpected(Err("Given dimension has a null parameter"));
@@ -66,6 +54,28 @@ tl::expected<int, Err> handleRename() {
 	if (!cancelled) param->name(newName);
 	return 1;
 }
+
+class RenameMenuEventHandler : public MarkingMenuEventHandler {
+	void notify(const Ptr<MarkingMenuEventArgs>& args) {
+		auto menu = args->linearMarkingMenu();
+		if (!menu) return;
+		auto controls = menu->controls();
+		if (!getSelectedDimension(ui->activeSelections())) {
+			auto myControl = controls->itemById(myControlId);
+			if (!myControl) return;
+			myControl->deleteMe();
+		}
+
+		auto cmdDefs = ui->commandDefinitions();
+		if (!cmdDefs) return;
+		auto myCmd = cmdDefs->itemById(myControlId);
+		if (!myCmd) return;
+
+		auto myControl = controls->addCommand(myCmd);
+	}
+};
+
+RenameMenuEventHandler onMenu;
 
 
 class CommandExecutedHandler : public CommandEventHandler {
@@ -106,12 +116,7 @@ private:
 
 CommandCreatedHandler onCommandCreated;
 
-tl::expected<Ptr<CommandDefinition>, Err> getOrCreateControl(Ptr<ToolbarControls> controls) {
-	auto myControl = controls->itemById(myControlId);
-	if (myControl) {
-		return myControl;
-	}
-
+tl::expected<Ptr<CommandDefinition>, Err> getOrCreateCommandDef() {
 	auto cmdDefs = ui->commandDefinitions();
 	if (!cmdDefs) {
 		return tl::make_unexpected(Err("Could not retrieve command definitions"));
@@ -128,25 +133,7 @@ tl::expected<Ptr<CommandDefinition>, Err> getOrCreateControl(Ptr<ToolbarControls
 	auto creationEvent = btn->commandCreated();
 	if (!creationEvent) return tl::make_unexpected(Err("Failed to get creation event"));
 	creationEvent->add(&onCommandCreated);
-
-	auto btnCommand = controls->addCommand(btn);
-	if (!btnCommand) {
-		return tl::make_unexpected(Err("Failed to add command to toolbar controls"));
-	}
-	btnCommand->isVisible(true);
-	return btnCommand;
-}
-
-tl::expected<Ptr<ToolbarControls>, Err> getSketchPanelControls() {
-	Ptr<ToolbarPanelList> panels = ui->allToolbarPanels();
-	if (!panels) return tl::make_unexpected(Err("Could not retrieve all panels"));
-
-	Ptr<ToolbarPanel> panel = panels->itemById(panelId);
-	if (!panel) return tl::make_unexpected(Err("Could not retrieve Sketch panel"));
-
-	Ptr<ToolbarControls> controls = panel->controls();
-	if (!controls) return tl::make_unexpected(Err("Could not retrieve Sketch panel controls"));
-	return controls;
+	return btn;
 }
 
 extern "C" XI_EXPORT bool run(const char*)
@@ -157,9 +144,13 @@ extern "C" XI_EXPORT bool run(const char*)
 	ui = app->userInterface();
 	if (!ui) return false;
 
-	auto controls = getSketchPanelControls();
-	auto myControl = controls.map(getOrCreateControl);
-	if (!myControl.has_value()) ui->messageBox(myControl.error().message);
+	auto cmdDef = getOrCreateCommandDef();
+	if (!cmdDef.has_value()) {
+		ui->messageBox(cmdDef.error().message);
+		return false;
+	}
+
+	ui->markingMenuDisplaying()->add(&onMenu);
 
 	return true;
 }
@@ -168,12 +159,7 @@ extern "C" XI_EXPORT bool stop(const char*)
 {
 	if (ui)
 	{
-		auto controls = getSketchPanelControls();
-		controls.map([](Ptr<ToolbarControls> controls) {
-			auto myControl = controls->itemById(myControlId);
-			if (!myControl) return;
-			myControl->deleteMe();
-		});
+		ui->markingMenuDisplaying()->remove(&onMenu);
 		auto cmdDefs = ui->commandDefinitions();
 		auto myCmd = cmdDefs->itemById(myControlId);
 		if (myCmd) myCmd->deleteMe();
