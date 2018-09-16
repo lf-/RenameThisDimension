@@ -61,9 +61,9 @@ tl::expected<int, Err> handleRename() {
 	auto param = dim->parameter();
 	if (!param) return tl::make_unexpected(Err("Given dimension has a null parameter"));
 
-	bool cancelled = false;
+	bool cancelled;
 	auto newName = ui->inputBox("New dimension name?", cancelled, "", param->name());
-	param->name(newName);
+	if (!cancelled) param->name(newName);
 	return 1;
 }
 
