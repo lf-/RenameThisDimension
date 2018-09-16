@@ -1,0 +1,15 @@
+{
+	"autodeskProduct":	"Fusion360",
+	"type":	"addin",
+	"author":	"lf",
+	"description":	{
+		"":	"Rename a selected dimension."
+	},
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true,
+	"id":	"7b64fe1d-ae19-44ba-806f-fde7dd346808",
+	"version":	"0.1",
+	"runOnStartup":	false,
+	"sourcewindows":	"RenameThisDimension.vcxproj",
+	"sourcemac":	"RenameThisDimension.xcodeproj"
+}
